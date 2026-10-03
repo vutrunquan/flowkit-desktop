@@ -3,7 +3,9 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -11,8 +13,9 @@ from agent.config import TTS_MODEL, TTS_SAMPLE_RATE
 
 logger = logging.getLogger(__name__)
 
-# Default to python3.10 (has torch/torchaudio/omnivoice); override with TTS_PYTHON_BIN if needed
-PYTHON_BIN = os.environ.get("TTS_PYTHON_BIN", "python3.10")
+# Default to python3.10 if available, otherwise current sys.executable / python3; override with TTS_PYTHON_BIN
+_default_python = "python3.10" if shutil.which("python3.10") else (sys.executable or "python3")
+PYTHON_BIN = os.environ.get("TTS_PYTHON_BIN", _default_python)
 
 # Inline script template for TTS generation via subprocess
 _TTS_SCRIPT = """

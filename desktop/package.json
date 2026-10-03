@@ -7,31 +7,92 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "dist:portable": "electron-builder --win portable",
-    "dist:installer": "electron-builder --win nsis"
+    "dist:win": "electron-builder --win --x64",
+    "dist:win:portable": "electron-builder --win portable --x64",
+    "dist:win:installer": "electron-builder --win nsis --x64",
+    "dist:portable": "electron-builder --win portable --x64",
+    "dist:installer": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac",
+    "dist:mac:arm64": "electron-builder --mac dmg zip --arm64",
+    "dist:mac:x64": "electron-builder --mac dmg zip --x64",
+    "dist:mac:universal": "electron-builder --mac dmg zip --universal",
+    "dist:all": "electron-builder -mw"
   },
   "build": {
     "appId": "com.flowkit.desktop",
     "productName": "Flow Kit",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "win": {
       "target": [
-        "portable",
-        "nsis"
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
-      "icon": "../docs/images/flowkit_banner.svg"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },
+    "mac": {
+      "category": "public.app-category.video",
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64",
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64",
+            "universal"
+          ]
+        }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
+    },
+    "dmg": {
+      "title": "Flow Kit Desktop",
+      "icon": "build/icon.icns",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
     "files": [
       "main.js",
       "preload.js",
       "splash.html",
-      "package.json"
+      "package.json",
+      "build/**/*"
     ]
   },
   "keywords": [

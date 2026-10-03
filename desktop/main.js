@@ -1,11 +1,13 @@
 /**
- * Flow Kit Desktop â€” Electron Main Process
+ * Flow Kit Desktop — Electron Main Process
  *
- * Manages:
- * 1. Python FastAPI Backend lifecycle (auto-spawn on port 8100, health check, graceful kill on exit)
- * 2. Chrome Extension loader (Manifest V3 bridge)
- * 3. Flow Kit Dashboard Window (React SPA on port 8100)
- * 4. Google Flow Window (embedded session with Google sign-in support)
+ * Cross-platform desktop runtime for Windows (x64) and macOS (Apple Silicon M-chip / Intel x64):
+ * 1. Environment & PATH adaptation across macOS Homebrew (arm64 & x64) and Windows
+ * 2. Python FastAPI Backend lifecycle (auto-spawn on port 8100, health check, graceful process-tree kill on exit)
+ * 3. Chrome Extension loader (Manifest V3 bridge)
+ * 4. Flow Kit Dashboard Window (React SPA on port 8100)
+ * 5. Google Flow Window (embedded session with Google sign-in support)
+ * 6. macOS standard application menus and clipboard integration (Cmd+C/V/X/A)
  */
 
 const { app, BrowserWindow, Menu, shell, ipcMain, session, dialog } = require('electron');
@@ -14,15 +16,60 @@ const http = require('http');
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
 
-const ROOT_DIR = path.resolve(__dirname, '..');
+// ─── Environment & PATH Normalization ────────────────────────
+
+// On macOS and Linux, GUI applications launched from Finder/Dock don't inherit
+// full shell PATH. Augment PATH with Homebrew (Apple Silicon / Intel) and local bins.
+if (process.platform !== 'win32') {
+  const extraPaths = [
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin',
+    '/usr/local/sbin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+    path.join(process.env.HOME || '', '.local', 'bin'),
+    path.join(process.env.HOME || '', '.cargo', 'bin'),
+  ];
+  const current = (process.env.PATH || '').split(path.delimiter);
+  const merged = Array.from(new Set([...extraPaths, ...current])).filter((p) => p && fs.existsSync(p));
+  process.env.PATH = merged.join(path.delimiter);
+}
+
+// ─── Path & Constants ────────────────────────────────────────
+
+function resolveRootDir() {
+  if (process.env.FLOW_AGENT_DIR && fs.existsSync(process.env.FLOW_AGENT_DIR)) {
+    return path.resolve(process.env.FLOW_AGENT_DIR);
+  }
+
+  if (app.isPackaged) {
+    const packagedResourcePath = path.join(process.resourcesPath, 'flowkit');
+    if (fs.existsSync(packagedResourcePath)) {
+      return packagedResourcePath;
+    }
+    if (fs.existsSync(path.join(process.cwd(), 'agent'))) {
+      return process.cwd();
+    }
+    return process.resourcesPath;
+  }
+
+  return path.resolve(__dirname, '..');
+}
+
+const ROOT_DIR = resolveRootDir();
 const BACKEND_URL = 'http://127.0.0.1:8100';
 const HEALTH_URL = `${BACKEND_URL}/health`;
 const FLOW_URL = 'https://flow.google.com/';
 const EXTENSION_PATH = path.join(ROOT_DIR, 'extension');
 const OUTPUT_PATH = path.join(ROOT_DIR, 'output');
+const ICON_PATH = path.join(__dirname, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
 // Standard Chrome User-Agent to prevent Google Account Sign-In blocks
-const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+const CHROME_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
 let mainWindow = null;
 let splashWindow = null;
@@ -33,29 +80,103 @@ let isQuitting = false;
 // Set global fallback User-Agent
 app.userAgentFallback = CHROME_UA;
 
-// â”€â”€â”€ Python Environment Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Platform & Architecture Info ────────────────────────────
+
+function getPlatformInfo() {
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  const arch = process.arch;
+
+  let archLabel = arch;
+  if (isMac) {
+    archLabel = arch === 'arm64' ? 'Apple Silicon (M-Chip)' : (arch === 'x64' ? 'Intel' : arch);
+    return `macOS ${archLabel}`;
+  }
+  if (isWin) {
+    return `Windows (${arch})`;
+  }
+  return `Linux (${arch})`;
+}
+
+// ─── Python Environment Detection ───────────────────────────
 
 function findPythonExecutable() {
   const isWin = process.platform === 'win32';
-  const venvPython = isWin
-    ? path.join(ROOT_DIR, 'venv', 'Scripts', 'python.exe')
-    : path.join(ROOT_DIR, 'venv', 'bin', 'python');
 
-  if (fs.existsSync(venvPython)) {
-    return venvPython;
+  // 1. Check virtual environments in ROOT_DIR
+  const candidateVenvs = [
+    isWin ? path.join(ROOT_DIR, 'venv', 'Scripts', 'python.exe') : path.join(ROOT_DIR, 'venv', 'bin', 'python'),
+    isWin ? path.join(ROOT_DIR, 'venv', 'Scripts', 'python3.exe') : path.join(ROOT_DIR, 'venv', 'bin', 'python3'),
+    isWin ? path.join(ROOT_DIR, '.venv', 'Scripts', 'python.exe') : path.join(ROOT_DIR, '.venv', 'bin', 'python'),
+    isWin ? path.join(ROOT_DIR, '.venv', 'Scripts', 'python3.exe') : path.join(ROOT_DIR, '.venv', 'bin', 'python3'),
+  ];
+
+  for (const cand of candidateVenvs) {
+    if (fs.existsSync(cand)) {
+      return cand;
+    }
   }
 
-  // Check PATH fallback
+  // 2. On macOS / Linux: Check Homebrew and standard system python binaries
+  if (!isWin) {
+    const isArm64 = process.arch === 'arm64';
+    const macCandidates = [
+      // Prioritize Apple Silicon Homebrew paths if arm64
+      ...(isArm64
+        ? [
+            '/opt/homebrew/bin/python3',
+            '/opt/homebrew/bin/python3.12',
+            '/opt/homebrew/bin/python3.11',
+            '/opt/homebrew/bin/python3.10',
+          ]
+        : []),
+      // Intel Mac Homebrew paths
+      '/usr/local/bin/python3',
+      '/usr/local/bin/python3.12',
+      '/usr/local/bin/python3.11',
+      '/usr/local/bin/python3.10',
+      // Homebrew fallback if on x64 Rosetta
+      '/opt/homebrew/bin/python3',
+      // Standard Unix / macOS
+      '/usr/bin/python3',
+      '/usr/bin/python',
+    ];
+
+    for (const p of macCandidates) {
+      if (fs.existsSync(p)) {
+        return p;
+      }
+    }
+
+    try {
+      const detected = execSync('which python3 || which python', { encoding: 'utf8' }).trim().split('\n')[0];
+      if (detected && fs.existsSync(detected)) {
+        return detected;
+      }
+    } catch (_) {}
+  } else {
+    // Windows: Check where python.exe
+    try {
+      const detected = execSync('where python.exe', { encoding: 'utf8' }).trim().split('\r\n')[0];
+      if (detected && fs.existsSync(detected)) {
+        return detected;
+      }
+    } catch (_) {}
+  }
+
+  // Fallback to PATH resolution
   return isWin ? 'python.exe' : 'python3';
 }
 
-// â”€â”€â”€ Backend Health Check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Backend Health Check ────────────────────────────────────
 
 function checkHealth(timeoutMs = 1500) {
   return new Promise((resolve) => {
     const req = http.get(HEALTH_URL, { timeout: timeoutMs }, (res) => {
       let data = '';
-      res.on('data', (chunk) => { data += chunk; });
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
@@ -74,17 +195,17 @@ function checkHealth(timeoutMs = 1500) {
   });
 }
 
-// â”€â”€â”€ Backend Process Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Backend Process Management ──────────────────────────────
 
 async function startBackend(onStatusUpdate) {
   const initialHealth = await checkHealth();
   if (initialHealth.ok) {
-    if (onStatusUpdate) onStatusUpdate('Backend Ä‘Ã£ Ä‘ang cháº¡y trÃªn cá»•ng 8100...');
+    if (onStatusUpdate) onStatusUpdate('Backend đã đang chạy trên cổng 8100...');
     return true;
   }
 
   const pythonExec = findPythonExecutable();
-  if (onStatusUpdate) onStatusUpdate(`Äang khá»Ÿi Ä‘á»™ng Python (${path.basename(pythonExec)})...`);
+  if (onStatusUpdate) onStatusUpdate(`Đang khởi động Python (${path.basename(pythonExec)})...`);
 
   const env = {
     ...process.env,
@@ -98,6 +219,7 @@ async function startBackend(onStatusUpdate) {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      detached: process.platform !== 'win32',
     });
 
     pythonProcess.stdout.on('data', (chunk) => {
@@ -116,19 +238,19 @@ async function startBackend(onStatusUpdate) {
     });
   } catch (err) {
     console.error('Failed to spawn Python process:', err);
-    if (onStatusUpdate) onStatusUpdate(`Lá»—i khá»Ÿi Ä‘á»™ng Python: ${err.message}`);
+    if (onStatusUpdate) onStatusUpdate(`Lỗi khởi động Python: ${err.message}`);
     return false;
   }
 
   // Poll until healthy
   const maxAttempts = 40;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    if (onStatusUpdate) onStatusUpdate(`Äang kiá»ƒm tra káº¿t ná»‘i server (${attempt}/${maxAttempts})...`);
+    if (onStatusUpdate) onStatusUpdate(`Đang kiểm tra kết nối server (${attempt}/${maxAttempts})...`);
     await new Promise((r) => setTimeout(r, 600));
 
     const health = await checkHealth();
     if (health.ok) {
-      if (onStatusUpdate) onStatusUpdate('Khá»Ÿi Ä‘á»™ng thÃ nh cÃ´ng! Äang táº£i giao diá»‡n...');
+      if (onStatusUpdate) onStatusUpdate('Khởi động thành công! Đang tải giao diện...');
       return true;
     }
   }
@@ -138,12 +260,19 @@ async function startBackend(onStatusUpdate) {
 
 function stopBackend() {
   if (pythonProcess && pythonProcess.pid) {
-    console.log(`Stopping Python process tree PID: ${pythonProcess.pid}`);
+    const pid = pythonProcess.pid;
+    console.log(`Stopping Python process tree PID: ${pid}`);
     try {
       if (process.platform === 'win32') {
-        execSync(`taskkill /pid ${pythonProcess.pid} /T /F`);
+        execSync(`taskkill /pid ${pid} /T /F`);
       } else {
-        process.kill(-pythonProcess.pid, 'SIGTERM');
+        try {
+          process.kill(-pid, 'SIGTERM');
+        } catch (_) {
+          try {
+            process.kill(pid, 'SIGTERM');
+          } catch (_) {}
+        }
       }
     } catch (e) {
       console.warn('Error killing Python process:', e.message);
@@ -152,7 +281,7 @@ function stopBackend() {
   }
 }
 
-// â”€â”€â”€ Windows Creation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Windows Creation ────────────────────────────────────────
 
 function createSplashWindow() {
   splashWindow = new BrowserWindow({
@@ -165,6 +294,7 @@ function createSplashWindow() {
     center: true,
     show: false,
     backgroundColor: '#00000000',
+    ...(fs.existsSync(ICON_PATH) ? { icon: ICON_PATH } : {}),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -192,6 +322,7 @@ function createMainWindow() {
     title: 'Flow Kit Desktop',
     backgroundColor: '#090a10',
     show: false,
+    ...(fs.existsSync(ICON_PATH) ? { icon: ICON_PATH } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -235,8 +366,9 @@ function openFlowWindow() {
   flowWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    title: 'Google Flow â€” Session Browser',
+    title: 'Google Flow — Session Browser',
     backgroundColor: '#111827',
+    ...(fs.existsSync(ICON_PATH) ? { icon: ICON_PATH } : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -252,25 +384,58 @@ function openFlowWindow() {
   });
 }
 
-// â”€â”€â”€ Application Menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Application Menu ────────────────────────────────────────
+
+function showAboutDialog(platformLabel) {
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Flow Kit Desktop',
+    message: 'Flow Kit Desktop v1.0.0',
+    detail: `Hệ thống tự động hóa sản xuất video AI chất lượng cao.\nNền tảng: ${platformLabel}\nTích hợp Google Flow, Veo 3 & Omni Flash.`,
+  });
+}
 
 function setupAppMenu() {
+  const isMac = process.platform === 'darwin';
+  const platformLabel = getPlatformInfo();
+
   const template = [
+    ...(isMac
+      ? [
+          {
+            role: 'appMenu',
+            submenu: [
+              {
+                label: 'Về Flow Kit Desktop',
+                click: () => showAboutDialog(platformLabel),
+              },
+              { type: 'separator' },
+              { role: 'services', label: 'Dịch vụ' },
+              { type: 'separator' },
+              { role: 'hide', label: 'Ẩn Flow Kit' },
+              { role: 'hideOthers', label: 'Ẩn ứng dụng khác' },
+              { role: 'unhide', label: 'Hiện tất cả' },
+              { type: 'separator' },
+              { role: 'quit', label: 'Thoát Flow Kit' },
+            ],
+          },
+        ]
+      : []),
     {
       label: 'Flow Kit',
       submenu: [
         {
-          label: 'Má»Ÿ Google Flow trong App',
+          label: 'Mở Google Flow trong App',
           accelerator: 'CmdOrCtrl+Shift+F',
           click: () => openFlowWindow(),
         },
         {
-          label: 'Má»Ÿ Google Flow trong Chrome ngoÃ i',
+          label: 'Mở Google Flow trong Chrome ngoài',
           click: () => shell.openExternal(FLOW_URL),
         },
         { type: 'separator' },
         {
-          label: 'Má»Ÿ thÆ° má»¥c Video Ä‘áº§u ra (output)',
+          label: 'Mở thư mục Video đầu ra (output)',
           accelerator: 'CmdOrCtrl+Shift+O',
           click: () => {
             if (!fs.existsSync(OUTPUT_PATH)) {
@@ -280,72 +445,96 @@ function setupAppMenu() {
           },
         },
         {
-          label: 'Kiá»ƒm tra tráº¡ng thÃ¡i há»‡ thá»‘ng',
+          label: 'Kiểm tra trạng thái hệ thống',
           click: async () => {
             const health = await checkHealth();
             const statusMsg = health.ok
-              ? `Backend: OK (Port 8100)\nExtension káº¿t ná»‘i: ${health.data?.extension_connected ? 'ÄÃ£ káº¿t ná»‘i' : 'ChÆ°a káº¿t ná»‘i'}\nPhiÃªn báº£n: ${health.data?.version || '1.3'}`
-              : 'Backend: KhÃ´ng pháº£n há»“i trÃªn port 8100!';
+              ? `Backend: OK (Port 8100)\nNền tảng: ${platformLabel}\nExtension kết nối: ${health.data?.extension_connected ? 'Đã kết nối' : 'Chưa kết nối'}\nPhiên bản: ${health.data?.version || '1.3'}`
+              : `Backend: Không phản hồi trên port 8100!\nNền tảng: ${platformLabel}`;
             dialog.showMessageBox(mainWindow, {
               type: health.ok ? 'info' : 'error',
-              title: 'Tráº¡ng thÃ¡i Flow Kit',
+              title: 'Trạng thái Flow Kit',
               message: statusMsg,
             });
           },
         },
         { type: 'separator' },
         {
-          label: 'Khá»Ÿi Ä‘á»™ng láº¡i Backend',
+          label: 'Khởi động lại Backend',
           click: async () => {
             stopBackend();
             await startBackend((t) => console.log(t));
             if (mainWindow) mainWindow.reload();
           },
         },
+        ...(!isMac
+          ? [
+              { type: 'separator' },
+              {
+                label: 'Thoát ứng dụng',
+                accelerator: 'CmdOrCtrl+Q',
+                click: () => {
+                  app.quit();
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      label: 'Chỉnh sửa',
+      submenu: [
+        { role: 'undo', label: 'Hoàn tác' },
+        { role: 'redo', label: 'Làm lại' },
         { type: 'separator' },
-        {
-          label: 'ThoÃ¡t á»©ng dá»¥ng',
-          accelerator: 'CmdOrCtrl+Q',
-          click: () => {
-            app.quit();
+        { role: 'cut', label: 'Cắt' },
+        { role: 'copy', label: 'Sao chép' },
+        { role: 'paste', label: 'Dán' },
+        { role: 'delete', label: 'Xóa' },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'Chọn tất cả' },
+      ],
+    },
+    {
+      label: 'Giao diện',
+      submenu: [
+        { role: 'reload', label: 'Tải lại trang (F5)' },
+        { role: 'forceReload', label: 'Tải lại cưỡng bức' },
+        { role: 'toggleDevTools', label: 'Công cụ phát triển (DevTools)' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: 'Cỡ chữ chuẩn' },
+        { role: 'zoomIn', label: 'Phóng to' },
+        { role: 'zoomOut', label: 'Thu nhỏ' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: 'Toàn màn hình' },
+      ],
+    },
+    ...(isMac
+      ? [
+          {
+            role: 'windowMenu',
+            submenu: [
+              { role: 'minimize', label: 'Thu nhỏ' },
+              { role: 'zoom', label: 'Phóng to cửa sổ' },
+              { type: 'separator' },
+              { role: 'front', label: 'Đưa lên phía trước' },
+            ],
           },
-        },
-      ],
-    },
+        ]
+      : []),
     {
-      label: 'Giao diá»‡n',
-      submenu: [
-        { role: 'reload', label: 'Táº£i láº¡i trang (F5)' },
-        { role: 'forceReload', label: 'Táº£i láº¡i cÆ°á»¡ng bá»©c' },
-        { role: 'toggleDevTools', label: 'CÃ´ng cá»¥ phÃ¡t triá»ƒn (DevTools)' },
-        { type: 'separator' },
-        { role: 'resetZoom', label: 'Cá»¡ chá»¯ chuáº©n' },
-        { role: 'zoomIn', label: 'PhÃ³ng to' },
-        { role: 'zoomOut', label: 'Thu nhá»' },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: 'ToÃ n mÃ n hÃ¬nh' },
-      ],
-    },
-    {
-      label: 'Trá»£ giÃºp',
+      label: 'Trợ giúp',
       submenu: [
         {
-          label: 'TÃ i liá»‡u hÆ°á»›ng dáº«n (CLAUDE.md)',
+          label: 'Tài liệu hướng dẫn (CLAUDE.md)',
           click: () => {
             const docPath = path.join(ROOT_DIR, 'CLAUDE.md');
             if (fs.existsSync(docPath)) shell.openPath(docPath);
           },
         },
         {
-          label: 'Vá» Flow Kit Desktop',
-          click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'Flow Kit Desktop',
-              message: 'Flow Kit Desktop v1.0.0\nHá»‡ thá»‘ng tá»± Ä‘á»™ng hÃ³a sáº£n xuáº¥t video AI cháº¥t lÆ°á»£ng cao.',
-              detail: 'TÃ­ch há»£p Google Flow, Veo 3 & Omni Flash.',
-            });
-          },
+          label: 'Về Flow Kit Desktop',
+          click: () => showAboutDialog(platformLabel),
         },
       ],
     },
@@ -355,7 +544,7 @@ function setupAppMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-// â”€â”€â”€ IPC Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── IPC Handlers ────────────────────────────────────────────
 
 ipcMain.on('open-flow-window', () => openFlowWindow());
 ipcMain.on('open-external-url', (_, url) => shell.openExternal(url));
@@ -375,9 +564,15 @@ ipcMain.handle('restart-backend', async () => {
   return ok;
 });
 
-// â”€â”€â”€ App Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── App Lifecycle ───────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  if (process.platform === 'darwin' && app.dock && fs.existsSync(ICON_PATH)) {
+    try {
+      app.dock.setIcon(ICON_PATH);
+    } catch (_) {}
+  }
+
   createSplashWindow();
 
   // Strip Electron identifier headers from requests to avoid Google Sign-In blocking
@@ -393,7 +588,7 @@ app.whenReady().then(async () => {
       await session.defaultSession.loadExtension(EXTENSION_PATH, {
         allowFileAccess: true,
       });
-      console.log('âœ“ Chrome Extension loaded successfully into Electron');
+      console.log('✓ Chrome Extension loaded successfully into Electron');
     } catch (err) {
       console.warn('Extension load notice:', err.message);
     }
@@ -405,10 +600,10 @@ app.whenReady().then(async () => {
   if (backendReady) {
     createMainWindow();
   } else {
-    updateSplashStatus('KhÃ´ng thá»ƒ káº¿t ná»‘i Backend. Vui lÃ²ng kiá»ƒm tra Python!');
+    updateSplashStatus('Không thể kết nối Backend. Vui lòng kiểm tra Python!');
     dialog.showErrorBox(
-      'Khá»Ÿi Ä‘á»™ng tháº¥t báº¡i',
-      'KhÃ´ng thá»ƒ khá»Ÿi Ä‘á»™ng tiáº¿n trÃ¬nh Python backend (FastAPI).\nVui lÃ²ng kiá»ƒm tra mÃ´i trÆ°á»ng áº£o venv hoáº·c cÃ i Ä‘áº·t thÆ° viá»‡n.'
+      'Khởi động thất bại',
+      'Không thể khởi động tiến trình Python backend (FastAPI).\nVui lòng kiểm tra môi trường ảo venv hoặc cài đặt thư viện.'
     );
   }
 

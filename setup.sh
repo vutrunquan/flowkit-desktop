@@ -6,6 +6,23 @@ echo "  Flow Kit — Setup"
 echo "========================================="
 echo ""
 
+# ─── macOS Homebrew PATH initialization ────────────────────────
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    ARCH="$(uname -m)"
+    if [ -d "/opt/homebrew/bin" ]; then
+        export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+    fi
+    if [ -d "/usr/local/bin" ]; then
+        export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+    fi
+    if [[ "$ARCH" == "arm64" ]]; then
+        echo "Detected macOS Apple Silicon ($ARCH)."
+    else
+        echo "Detected macOS Intel ($ARCH)."
+    fi
+    echo ""
+fi
+
 # ─── Windows check ──────────────────────────────────────────
 if [[ "$(uname -s)" == MINGW* ]] || [[ "$(uname -s)" == MSYS* ]] || [[ "$(uname -s)" == CYGWIN* ]]; then
     echo "Detected Windows (Git Bash / MSYS2)."
@@ -109,6 +126,25 @@ python3 -c "from agent.main import app; print('  OK: agent.main imports successf
     exit 1
 }
 
+# ─── Node.js & Desktop Setup ──────────────────────────────
+echo "Checking Node.js & Desktop App..."
+if command -v npm &>/dev/null; then
+    echo "  OK: Node $(node --version 2>&1), npm $(npm --version 2>&1)"
+    if [ ! -f "dashboard/dist/index.html" ]; then
+        echo "  Building Dashboard UI..."
+        (cd dashboard && npm install -q && npm run build)
+        echo "  OK: Dashboard build ready"
+    fi
+    if [ ! -d "desktop/node_modules" ]; then
+        echo "  Installing Desktop Electron dependencies..."
+        (cd desktop && npm install -q)
+        echo "  OK: Desktop Electron ready"
+    fi
+else
+    echo "  WARNING: Node.js/npm not found. Desktop app requires Node.js."
+    echo "  macOS:   brew install node"
+fi
+
 # ─── jq (for statusline) ───────────────────────────────────
 echo "Checking jq..."
 if command -v jq &>/dev/null; then
@@ -161,19 +197,13 @@ echo "========================================="
 echo ""
 echo "Next steps:"
 echo ""
-echo "  1. Load Chrome extension:"
-echo "     chrome://extensions → Developer mode → Load unpacked → extension/"
+echo "  ► Run Desktop App (All-in-One GUI):"
+echo "     macOS (Apple Silicon M-chip & Intel): ./run_desktop.sh  (or double-click run_desktop.command)"
+echo "     Windows:                              run_desktop.bat"
 echo ""
-echo "  2. Open Google Flow:"
-echo "     https://flow.google.com/ (sign in)"
-echo ""
-echo "  3. Start the agent:"
-echo "     source venv/bin/activate"
-echo "     python -m agent.main"
-echo ""
-echo "  4. Verify:"
-echo "     curl http://127.0.0.1:8100/health"
-echo ""
-echo "  5. Claude Code statusline:"
-echo "     GLA status shows at the bottom of Claude Code automatically."
+echo "  Or run manually via CLI:"
+echo "     1. Load Chrome extension: chrome://extensions → Load unpacked → extension/"
+echo "     2. Open Google Flow: https://flow.google.com/"
+echo "     3. Start backend: source venv/bin/activate && python -m agent.main"
+echo "     4. Verify: curl http://127.0.0.1:8100/health"
 echo ""

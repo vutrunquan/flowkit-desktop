@@ -1,63 +1,119 @@
-# Flow Kit Desktop â€” á»¨ng dá»¥ng MÃ¡y tÃ­nh Äá»™c láº­p
+# Flow Kit Desktop — Ứng dụng Desktop Đa Nền Tảng (Windows, macOS M-Chip & Intel)
 
-Há»‡ thá»‘ng á»©ng dá»¥ng Desktop trá»n gÃ³i (All-in-One) cho **Flow Kit**, cho phÃ©p khá»Ÿi cháº¡y giao diá»‡n Ä‘iá»u khiá»ƒn (Dashboard), quáº£n lÃ½ tiáº¿n trÃ¬nh Python FastAPI Backend vÃ  káº¿t ná»‘i Google Flow trá»±c tiáº¿p trÃªn mÃ¡y tÃ­nh mÃ  khÃ´ng cáº§n thao tÃ¡c gÃµ lá»‡nh thá»§ cÃ´ng.
+Hệ thống ứng dụng Desktop trọn gói (All-in-One) cho **Flow Kit**, hỗ trợ hoạt động mượt mà trên **Windows (x64)** và **macOS (Apple Silicon M1/M2/M3/M4 & Intel x64)**.
 
----
-
-## ðŸŒŸ TÃ­nh NÄƒng Ná»•i Báº­t
-
-1. **Khá»Ÿi Ä‘á»™ng 1-Click (`run_desktop.bat`)**:
-   - Tá»± Ä‘á»™ng nháº­n diá»‡n mÃ´i trÆ°á»ng Python (`venv` hoáº·c há»‡ thá»‘ng).
-   - Tá»± Ä‘á»™ng khá»Ÿi Ä‘á»™ng FastAPI Backend trÃªn cá»•ng `8100` ngáº§m.
-   - Hiá»ƒn thá»‹ mÃ n hÃ¬nh chá» (Splash Screen) sang trá»ng trÆ°á»›c khi vÃ o app.
-   - Tá»± Ä‘á»™ng táº¯t sáº¡ch toÃ n bá»™ tiáº¿n trÃ¬nh Python ngáº§m khi Ä‘Ã³ng á»©ng dá»¥ng.
-
-2. **Giao diá»‡n Dashboard TÃ­ch há»£p**:
-   - Cháº¡y trá»±c tiáº¿p Dashboard quáº£n lÃ½ dá»± Ã¡n, cáº£nh quay, thÆ° viá»‡n video trong cá»­a sá»• Desktop native.
-   - Káº¿t ná»‘i WebSocket thá»i gian thá»±c tá»›i Backend (`ws://127.0.0.1:8100/ws/dashboard`).
-
-3. **Cá»­a sá»• Google Flow Session**:
-   - PhÃ­m táº¯t `Ctrl + Shift + F`: Má»Ÿ cá»­a sá»• Google Flow ngay bÃªn trong App vá»›i phiÃªn Ä‘Äƒng nháº­p Ä‘Æ°á»£c lÆ°u trá»¯ vÄ©nh viá»…n (`persist:flowkit_google`).
-   - Cáº¥u hÃ¬nh sáºµn Chrome User-Agent Ä‘á»ƒ trÃ¡nh bá»‹ Google cháº·n Ä‘Äƒng nháº­p.
-   - TÃ¹y chá»n má»Ÿ trÃªn trÃ¬nh duyá»‡t Google Chrome ngoÃ i náº¿u muá»‘n.
-
-4. **Tiá»‡n Ã­ch TÃ­ch há»£p**:
-   - PhÃ­m táº¯t `Ctrl + Shift + O`: Má»Ÿ nhanh thÆ° má»¥c video xuáº¥t báº£n (`output/`).
-   - Khá»Ÿi Ä‘á»™ng láº¡i Backend nhanh tá»« Menu há»‡ thá»‘ng.
-   - Tá»± Ä‘á»™ng náº¡p Chrome Extension cáº§u ná»‘i (`extension/`).
+Ứng dụng tự động khởi chạy giao diện điều khiển (Dashboard), quản lý vòng đời tiến trình Python FastAPI Backend, nạp Chrome Extension và kết nối phiên Google Flow trực tiếp ngay trên máy tính mà không cần gõ lệnh thủ công.
 
 ---
 
-## ðŸš€ CÃ¡ch Sá»­ Dá»¥ng
+## 🌟 Tính Năng Nổi Bật
 
-### CÃ¡ch 1: Cháº¡y nhanh báº±ng file Batch (KhuyÃªn dÃ¹ng khi phÃ¡t triá»ƒn/sá»­ dá»¥ng)
-Nháº¥p Ä‘Ãºp chuá»™t vÃ o file:
+1. **Khởi động 1-Click đa nền tảng**:
+   - **Windows**: Nhấp đúp `run_desktop.bat`.
+   - **macOS**: Nhấp đúp `run_desktop.command` trong Finder hoặc chạy `./run_desktop.sh`.
+   - Tự động nhận diện kiến trúc phần cứng: Apple Silicon (`arm64`) hay Intel (`x64`).
+   - Tự động cấu hình biến môi trường `PATH` cho Homebrew (`/opt/homebrew` trên chip M, `/usr/local` trên Intel).
+   - Tự động kiểm tra môi trường Python (`venv` hoặc hệ thống), tự động kích hoạt FastAPI Backend trên cổng `8100`.
+   - Quản lý cây tiến trình (Process Tree), tự động tắt sạch tiến trình Python ngầm khi đóng ứng dụng trên cả Windows và macOS.
+
+2. **Giao diện Dashboard Tích hợp**:
+   - Chạy trực tiếp Dashboard quản lý dự án, cảnh quay, thư viện video trong cửa sổ Desktop native.
+   - Kết nối WebSocket thời gian thực tới Backend (`ws://127.0.0.1:8100/ws/dashboard`).
+   - Hỗ trợ đầy đủ phím tắt macOS (`Cmd+C`, `Cmd+V`, `Cmd+A`, `Cmd+X`) và Windows (`Ctrl+C`, `Ctrl+V`, `Ctrl+A`).
+
+3. **Cửa sổ Google Flow Session**:
+   - Phím tắt `Cmd+Shift+F` (macOS) hoặc `Ctrl+Shift+F` (Windows): Mở cửa sổ Google Flow ngay bên trong App với phiên đăng nhập được lưu trữ vĩnh viễn (`persist:flowkit_google`).
+   - Cấu hình sẵn Chrome User-Agent để tránh bị Google chặn đăng nhập.
+   - Tùy chọn mở trên trình duyệt Google Chrome ngoài nếu muốn.
+
+4. **Tiện ích Tích hợp & Hệ Thống Menu Chuẩn**:
+   - Phím tắt `Cmd+Shift+O` (macOS) hoặc `Ctrl+Shift+O` (Windows): Mở nhanh thư mục video xuất bản (`output/`).
+   - Menu chuẩn macOS (Application Menu, Edit Menu, Window Menu).
+   - Khởi động lại Backend nhanh từ Menu hệ thống.
+   - Tự động nạp Chrome Extension cầu nối (`extension/`).
+
+---
+
+## 🚀 Cách Sử Dụng
+
+### 1. Khởi chạy trên macOS (Apple Silicon M1/M2/M3/M4 & Intel)
+
+#### Cách 1: Nhấp đúp chuột trong Finder (Khuyên dùng)
+Nhấp đúp chuột vào file:
+```
+run_desktop.command
+```
+ngay tại thư mục gốc của dự án. File này sẽ mở Terminal, kiểm tra kiến trúc CPU (M-chip hay Intel), build Dashboard (nếu chưa có) và mở ứng dụng Flow Kit Desktop.
+
+*Lưu ý lần đầu nếu macOS yêu cầu cấp quyền thực thi:*
+```bash
+chmod +x run_desktop.sh run_desktop.command
+```
+
+#### Cách 2: Chạy bằng Terminal
+```bash
+./run_desktop.sh
+```
+
+---
+
+### 2. Khởi chạy trên Windows
+
+Nhấp đúp chuột vào file:
 ```
 run_desktop.bat
 ```
-ngay táº¡i thÆ° má»¥c gá»‘c cá»§a dá»± Ã¡n. File nÃ y sáº½ tá»± kiá»ƒm tra báº£n build Dashboard vÃ  má»Ÿ App Desktop ngay láº­p tá»©c.
+ngay tại thư mục gốc của dự án. File này sẽ tự kiểm tra môi trường ảo Python `venv`, bản build Dashboard và mở App Desktop ngay lập tức.
 
-### CÃ¡ch 2: Cháº¡y qua dÃ²ng lá»‡nh
+---
+
+### 3. Chạy thủ công qua lệnh npm (Cho cả Win & Mac)
+
 ```bash
-# 1. Di chuyá»ƒn vÃ o thÆ° má»¥c desktop
+# 1. Di chuyển vào thư mục desktop
 cd desktop
 
-# 2. Khá»Ÿi cháº¡y á»©ng dá»¥ng
+# 2. Khởi chạy ứng dụng
 npm start
 ```
 
 ---
 
-## ðŸ“¦ ÄÃ³ng gÃ³i thÃ nh file `.exe` cÃ i Ä‘áº·t hoáº·c Portable
+## 📦 Hướng Dẫn Đóng Gói Ứng Dụng (Build Installer & Binary)
 
-Trong thÆ° má»¥c `desktop`:
+Trong thư mục `desktop`:
+
+### 🍏 Đóng gói cho macOS (DMG & ZIP)
 
 ```bash
-# ÄÃ³ng gÃ³i báº£n Portable (file .exe cháº¡y ngay khÃ´ng cáº§n cÃ i Ä‘áº·t)
-npm run dist:portable
+# 1. Đóng gói cho Apple Silicon (Mac chip M1, M2, M3, M4):
+npm run dist:mac:arm64
 
-# ÄÃ³ng gÃ³i báº£n Bá»™ cÃ i Ä‘áº·t Windows (NSIS Installer)
-npm run dist:installer
+# 2. Đóng gói cho Mac Intel (x64):
+npm run dist:mac:x64
+
+# 3. Đóng gói bản Universal (Chạy trên cả chip M và Intel trong 1 file cài duy nhất):
+npm run dist:mac:universal
+
+# Hoặc đóng gói tự động cho máy Mac hiện tại:
+npm run dist:mac
 ```
 
-Sau khi hoÃ n táº¥t, file `.exe` sáº½ náº±m trong thÆ° má»¥c `desktop/release/`.
+Sau khi hoàn tất, file `.dmg` và `.zip` sẽ nằm trong thư mục `desktop/release/`.
+
+---
+
+### 🪟 Đóng gói cho Windows (.exe)
+
+```bash
+# Đóng gói bản Portable (file .exe chạy ngay không cần cài đặt):
+npm run dist:win:portable
+
+# Đóng gói bộ cài đặt Windows (NSIS Setup .exe):
+npm run dist:win:installer
+
+# Hoặc chạy lệnh tổng quát:
+npm run dist:win
+```
+
+Sau khi hoàn tất, file `.exe` sẽ nằm trong thư mục `desktop/release/`.
