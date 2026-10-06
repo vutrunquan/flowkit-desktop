@@ -462,6 +462,28 @@ async def test_direct(request: Request):
         return {"ok": False, "error": str(e)}
 
 
+# ─── Static Dashboard SPA Serving ──────────────────────────────────────────
+
+from agent.config import BASE_DIR
+_dist_dir = BASE_DIR / "dashboard" / "dist"
+if _dist_dir.exists():
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    _assets_dir = _dist_dir / "assets"
+    if _assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="dashboard_assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("ws/"):
+            return FileResponse(_dist_dir / "index.html")
+        file_path = _dist_dir / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_dist_dir / "index.html")
+
+
 if __name__ == "__main__":
     import os
     import uvicorn
