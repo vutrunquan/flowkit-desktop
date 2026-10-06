@@ -33,6 +33,8 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 
+from agent.utils.paths import file_url_to_path
+
 logger = logging.getLogger(__name__)
 
 TERMINAL_OK = "succeeded"
@@ -83,14 +85,8 @@ async def to_data_url(ref: str, *, timeout: float = 60.0) -> str:
             mime = resp.headers.get("content-type", "").split(";")[0].strip()
         mime = mime or mimetypes.guess_type(parsed.path)[0] or "image/png"
     else:
-        if parsed.scheme == "file":
-            raw = ref[7:]
-            if raw.startswith("/") and len(raw) > 2 and raw[2] == ":":
-                raw = raw[1:]
-            path = Path(unquote(raw))
-        else:
-            path = Path(ref)
-        if not path.is_file():
+        path = file_url_to_path(ref) if parsed.scheme == "file" else Path(ref)
+        if not path or not path.is_file():
             raise FileNotFoundError(f"image not found: {ref}")
         data = await asyncio.to_thread(path.read_bytes)
         mime = mimetypes.guess_type(path.name)[0] or "image/png"
