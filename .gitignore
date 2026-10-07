@@ -11,6 +11,7 @@ agent/active_project.json
 
 # Generated AI tool configs (run: python setup.py)
 .claude/commands/fk-*
+.agents/skills/fk-*
 AGENTS.md
 .fk-setup.json
 
@@ -23,14 +24,14 @@ ds-bundle/
 # Chrome generates this when it loads the unpacked extension
 extension/_metadata/
 
-# oh-my-claudecode session state (plans, hud, logs) — tooling, not project content
+# oh-my-claudecode session state (plans, hud, logs) -- tooling, not project content
 .omc/
 .agent/
 flow_session_project.json
 
-# Desktop app artifacts
-desktop/node_modules/
-desktop/release/
-
 .venv/
 venv/
+*.mp3
+scratch/
+
+series_manifest.json
