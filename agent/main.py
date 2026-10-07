@@ -448,10 +448,12 @@ async def test_direct(request: Request):
     pid = data.get("project_id", "594758cc-11f5-4f92-8b3c-1213686591f4")
     prompt = data.get("prompt")
     ref_ids = data.get("ref_media_ids")
+    model = fb.resolve_image_model(data.get("model"))
     freq = fb.image_request(
         prompt, pid, count=1,
         aspect="IMAGE_ASPECT_RATIO_LANDSCAPE",
         ref_media_ids=ref_ids,
+        model=model,
     )
     try:
         res = await client._batch_payload(fb.RPC_GEN_IMAGE, freq, fb.CAPTCHA_IMAGE)
