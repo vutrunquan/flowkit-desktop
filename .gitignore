@@ -21,6 +21,10 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+node_modules/
+desktop/node_modules/
+desktop/release/
+
 # Chrome generates this when it loads the unpacked extension
 extension/_metadata/
 

@@ -109,7 +109,10 @@ function findPythonExecutable() {
     isWin ? path.join(ROOT_DIR, 'venv', 'Scripts', 'python3.exe') : path.join(ROOT_DIR, 'venv', 'bin', 'python3'),
     isWin ? path.join(ROOT_DIR, '.venv', 'Scripts', 'python.exe') : path.join(ROOT_DIR, '.venv', 'bin', 'python'),
     isWin ? path.join(ROOT_DIR, '.venv', 'Scripts', 'python3.exe') : path.join(ROOT_DIR, '.venv', 'bin', 'python3'),
+    isWin ? path.join(process.cwd(), 'venv', 'Scripts', 'python.exe') : path.join(process.cwd(), 'venv', 'bin', 'python'),
+    isWin ? path.resolve(__dirname, '..', '..', 'venv', 'Scripts', 'python.exe') : path.resolve(__dirname, '..', '..', 'venv', 'bin', 'python'),
   ];
+
 
   for (const cand of candidateVenvs) {
     if (fs.existsSync(cand)) {

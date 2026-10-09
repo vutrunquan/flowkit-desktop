@@ -56,7 +56,9 @@
   "image_models": {
     "NANO_BANANA_PRO": "GEM_PIX_2",
     "NANO_BANANA_2": "HARBOR_SEAL",
-    "NANO_BANANA_2_LITE": "HARBOR_SEAL"
+    "NANO_BANANA_2_LITE": "HARBOR_SEAL",
+    "NANO_BANANA_2_1": "HARBOR_SEAL",
+    "NANO_BANANA_2.1": "HARBOR_SEAL"
   },
   "default_image_model": "NANO_BANANA_2",
   "batch_video_models": {

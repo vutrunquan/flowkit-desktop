@@ -93,8 +93,32 @@
       "splash.html",
       "package.json",
       "build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../agent",
+        "to": "flowkit/agent",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "../extension",
+        "to": "flowkit/extension"
+      },
+      {
+        "from": "../dashboard/dist",
+        "to": "flowkit/dashboard/dist"
+      },
+      {
+        "from": "../requirements.txt",
+        "to": "flowkit/requirements.txt"
+      }
     ]
   },
+
   "keywords": [
     "flowkit",
     "ai-video",
